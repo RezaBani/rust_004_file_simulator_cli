@@ -4,7 +4,6 @@ use std::{
     net::{TcpListener, TcpStream},
     thread,
     time::Duration,
-    usize,
 };
 
 use threadpool::ThreadPool;
