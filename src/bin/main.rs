@@ -92,16 +92,17 @@ fn read_args() -> CommandLineArguments {
 
 fn write_to_stream(mut stream: TcpStream) {
     let args = read_args();
+    let thread_id = thread::current().id();
+    let up_limit = if args.max_bytes.is_some_and(|n| n < args.content.len()) {
+        args.max_bytes.unwrap()
+    } else {
+        args.content.len()
+    };
     loop {
         let mut pos = 0;
-        let up_limit = if args.max_bytes.is_some_and(|n| n < args.content.len()) {
-            args.max_bytes.unwrap()
-        } else {
-            args.content.len()
-        };
         while pos + args.rate_chunk < up_limit {
             let progress = 100.0 * (pos as f64 / up_limit as f64);
-            println!("Sending data to client - Progress: {progress:.3}%");
+            println!("Sending data to client {thread_id:?} - Progress: {progress:.3}%");
             match stream.write(args.content[pos..pos + args.rate_chunk].as_bytes()) {
                 Ok(_) => stream.flush().expect("Error Flushing"),
                 Err(_) => println!(
@@ -112,7 +113,7 @@ fn write_to_stream(mut stream: TcpStream) {
             pos += args.rate_chunk;
             thread::sleep(Duration::from_millis(args.rate_time));
         }
-        println!("Sending last chunk to client");
+        println!("Sending last chunk to client {thread_id:?}");
         match stream.write(args.content[pos..].as_bytes()) {
             Ok(_) => stream.flush().expect("Error Flushing"),
             Err(_) => println!("Writing {} to stream failed", &args.content[pos..]),
