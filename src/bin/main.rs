@@ -2,6 +2,7 @@ use std::{
     env, fs,
     io::Write,
     net::{TcpListener, TcpStream},
+    process::Command,
     thread,
     time::Duration,
 };
@@ -14,13 +15,23 @@ fn main() {
     let pool = ThreadPool::new(4);
     let port = read_port();
     let listener = TcpListener::bind(format!("127.0.0.1:{}", port)).unwrap();
+    println!("Server is ready at 127.0.0.1:{port}");
     for stream in listener.incoming() {
         let stream = stream.unwrap();
         pool.execute(move || {
             write_to_stream(stream);
-            println!("Data Transmition Finished");
         });
     }
+}
+
+enum ArgumentsOrder {
+    // ExecutableName = 0,
+    RateChunk = 1,
+    RateTime = 2,
+    Port = 3,
+    Filename = 4,
+    Repeat = 5,
+    MaxBytes = 6,
 }
 
 struct CommandLineArguments {
@@ -31,54 +42,86 @@ struct CommandLineArguments {
     max_bytes: Option<usize>,
 }
 
+fn create_file() -> String {
+    let rust_cwd = env::current_dir().unwrap();
+    env::set_current_dir("../../Zig/zig_003_random_float_raw_data/").expect("Change cwd failed");
+    let zig_cwd = env::current_dir().unwrap();
+    let mut zig = Command::new("zig");
+    zig.args(vec!["build", "run"])
+        .status()
+        .expect("Error executing zig");
+    let destination = rust_cwd.to_str().unwrap().to_owned() + "/target/raw.data";
+    fs::copy(
+        zig_cwd.to_str().unwrap().to_owned() + "/zig-out/bin/raw.data",
+        destination.as_str(),
+    )
+    .expect("Copy Error");
+    env::set_current_dir(rust_cwd).unwrap();
+    return destination;
+}
+
 fn validate_args() -> Vec<String> {
     let args: Vec<String> = env::args().collect();
-    const MIN_ARG_COUNT: usize = 4;
+    const MIN_ARG_COUNT: usize = 3;
     const MAX_ARG_COUNT: usize = 6;
     if args.len() < MIN_ARG_COUNT + 1 || args.len() > MAX_ARG_COUNT + 1 {
-        panic!("Should have at least {MIN_ARG_COUNT} arguments and most {MAX_ARG_COUNT} arguments:\n
-                filename [path] rate_chunk [bytes] rate_time [ms] port [0-65535] loop [true or false (Default: false)] max_bytes [bytes (Dfault:No Limit)]")
+        panic!(
+            "Should have at least {MIN_ARG_COUNT} arguments and most {MAX_ARG_COUNT} arguments:\n
+            rate_chunk [bytes] rate_time [ms] port [0-65535]\n
+            filename [path (Default: /target/raw.data)]\n
+            repeat [true or false (Default: false)]\n
+            max_bytes [bytes (Dfault:No Limit)]\n"
+        )
     }
     args
 }
 
 fn read_port() -> u16 {
     let args = validate_args();
-    let port = (&args[4])
+    let arg_number = ArgumentsOrder::Port as usize;
+    let port = (&args[arg_number])
         .parse()
-        .expect(format!("Specified Port {} is not a number", &args[4]).as_str());
+        .expect(format!("Specified Port {} is not a number", &args[arg_number]).as_str());
     port
 }
 
 fn read_args() -> CommandLineArguments {
     let args = validate_args();
-    let filename = &args[1];
-    let rate_chunk = (&args[2])
+    let arg_number = ArgumentsOrder::RateChunk as usize;
+    let rate_chunk = (&args[arg_number])
         .parse()
-        .expect(format!("Specified Rate Chunk {} is not a number", &args[2]).as_str());
-    let rate_time = (&args[3])
+        .expect(format!("Specified Rate Chunk {} is not a number", &args[arg_number]).as_str());
+    let arg_number = ArgumentsOrder::RateTime as usize;
+    let rate_time = (&args[arg_number])
         .parse()
-        .expect(format!("Specified Rate Time {} is not a number", &args[3]).as_str());
-    let repeat = if args.len() == 6 {
-        if (&args[5]).to_lowercase() == "true" {
+        .expect(format!("Specified Rate Time {} is not a number", &args[arg_number]).as_str());
+    let arg_number = ArgumentsOrder::Filename as usize;
+    let filename = if args.len() > arg_number {
+        &args[arg_number]
+    } else {
+        &create_file()
+    };
+    let arg_number = ArgumentsOrder::Repeat as usize;
+    let repeat = if args.len() > arg_number {
+        if (&args[arg_number]).to_lowercase() == "true" {
             true
-        } else if &args[5].to_lowercase() == "false" {
+        } else if &args[arg_number].to_lowercase() == "false" {
             false
         } else {
-            panic!("Specified loop {} isn't true or false", &args[4]);
+            panic!("Specified repeat {} isn't true or false", &args[arg_number]);
         }
     } else {
         false
     };
-    let max_bytes = if args.len() == 7 {
-        Some(
-            (&args[6])
-                .parse()
-                .expect(format!("Specified Rate Chunk {} is not a number", &args[6]).as_str()),
-        )
-    } else {
-        None
-    };
+    let arg_number = ArgumentsOrder::MaxBytes as usize;
+    let max_bytes =
+        if args.len() > arg_number {
+            Some((&args[arg_number]).parse().expect(
+                format!("Specified Rate Chunk {} is not a number", &args[arg_number]).as_str(),
+            ))
+        } else {
+            None
+        };
     let content =
         fs::read_to_string(filename).expect(format!("Error Reading the file: {filename}").as_str());
 
@@ -114,7 +157,6 @@ fn write_to_stream(mut stream: TcpStream) {
             pos += args.rate_chunk;
             thread::sleep(Duration::from_millis(args.rate_time));
         }
-        println!("Sending last chunk to client {thread_id:?}");
         match stream.write(args.content[pos..].as_bytes()) {
             Ok(_) => stream.flush().expect("Error Flushing"),
             Err(_) => println!("Writing {} to stream failed", &args.content[pos..]),
@@ -123,4 +165,5 @@ fn write_to_stream(mut stream: TcpStream) {
             break;
         }
     }
+    println!("Data Transmition to Client {thread_id:?} is Finished");
 }
