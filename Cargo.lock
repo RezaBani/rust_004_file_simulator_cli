@@ -6,9 +6,9 @@ version = 4
 name = "rust_004_file_simulator_cli"
 version = "0.1.0"
 dependencies = [
- "threadpool",
+ "rust_threadpool",
 ]
 
 [[package]]
-name = "threadpool"
+name = "rust_threadpool"
 version = "0.1.0"

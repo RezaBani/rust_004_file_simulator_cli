@@ -6,7 +6,9 @@ use std::{
     time::Duration,
 };
 
-use threadpool::ThreadPool;
+use rust_threadpool::ThreadPool;
+
+// cargo run raw.data 500 1000 1033 False 15000
 
 fn main() {
     let pool = ThreadPool::new(4);
