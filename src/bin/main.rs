@@ -9,7 +9,7 @@ use std::{
 
 use rust_threadpool::ThreadPool;
 
-// cargo run raw.data 500 1000 1033 False 15000
+// cargo run 500 1000 1033
 
 fn main() {
     let pool = ThreadPool::new(4);
@@ -44,19 +44,22 @@ struct CommandLineArguments {
 
 fn create_file() -> String {
     let rust_cwd = env::current_dir().unwrap();
-    env::set_current_dir("../../Zig/zig_003_random_float_raw_data/").expect("Change cwd failed");
-    let zig_cwd = env::current_dir().unwrap();
-    let mut zig = Command::new("zig");
-    zig.args(vec!["build", "run"])
-        .status()
-        .expect("Error executing zig");
     let destination = rust_cwd.to_str().unwrap().to_owned() + "/target/raw.data";
-    fs::copy(
-        zig_cwd.to_str().unwrap().to_owned() + "/zig-out/bin/raw.data",
-        destination.as_str(),
-    )
-    .expect("Copy Error");
-    env::set_current_dir(rust_cwd).unwrap();
+    if fs::exists(destination.as_str()).unwrap() == false {
+        env::set_current_dir("../../Zig/zig_003_random_float_raw_data/")
+            .expect("Change cwd failed");
+        let zig_cwd = env::current_dir().unwrap();
+        let mut zig = Command::new("zig");
+        zig.args(vec!["build", "run"])
+            .status()
+            .expect("Error executing zig");
+        fs::copy(
+            zig_cwd.to_str().unwrap().to_owned() + "/zig-out/bin/raw.data",
+            destination.as_str(),
+        )
+        .expect("Copy Error");
+        env::set_current_dir(rust_cwd).unwrap();
+    }
     return destination;
 }
 
